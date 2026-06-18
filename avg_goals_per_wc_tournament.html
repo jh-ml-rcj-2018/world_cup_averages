@@ -1,0 +1,91 @@
+
+<div style="padding: 1rem 0;">
+  <h2 class="sr-only">Bar chart showing average goals per match at each FIFA World Cup from 2002 to 2026</h2>
+  <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; font-size: 13px; color: var(--color-text-secondary);">
+    <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #3266ad;"></span>Group Stage</span>
+    <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #c2410c;"></span>Knockout</span>
+    <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #888; border: 1px dashed #888;"></span>Overall avg</span>
+  </div>
+  <div style="position: relative; width: 100%; height: 320px;">
+    <canvas id="goalsChart" role="img" aria-label="Grouped bar chart showing average goals per match by phase for World Cups 2002 to 2026. 2006 had the highest overall average (~2.30), while 2010 had the lowest (~2.27).">Average goals per match: 2002 Group 2.72 Knockout 2.31; 2006 Group 2.44 Knockout 2.08; 2010 Group 2.10 Knockout 2.22; 2014 Group 2.98 Knockout 2.66; 2018 Group 2.57 Knockout 2.64; 2022 Group 2.50 Knockout 2.63; 2026 Group 3.01 (partial).</canvas>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const data = {
+  2002: { group: [1,2,8,3,2,4,1,4,1,3,2,2,4,2,2,5,2,2,1,0,3,4,1,1,3,4,3,2,1,2,2,4,2,6,2,3,2,0,5,4,7,3,2,1,2,5,1,4], knockout: [1,3,3,2,2,2,1,3,3,1,0,1,1,0,0,5,2] },
+  2006: { group: [6,2,1,0,3,1,4,1,4,3,2,3,0,1,4,4,1,3,2,1,6,3,0,2,2,2,0,2,2,2,3,4,3,3,2,4,3,2,5,0,2,3,5,4,1,1,2,2], knockout: [2,3,1,1,1,0,3,4,2,3,0,1,2,3,0,1,4,2] },
+  2010: { group: [2,0,2,1,2,1,1,4,2,1,2,2,0,3,1,1,3,5,3,2,1,4,0,1,2,3,2,2,4,7,1,2,1,3,2,4,1,1,3,1,5,0,4,3,0,3,2,3], knockout: [3,3,5,4,3,3,0,1,3,2,0,1,4,1,5,1,5,1] },
+  2014: { group: [4,1,6,4,3,4,3,3,3,3,3,4,0,3,3,0,2,5,2,4,3,4,0,1,7,3,1,4,1,1,6,4,3,2,5,4,1,0,5,3,5,4,3,0,1,3,2,1], knockout: [2,2,3,2,2,3,1,3,1,3,1,0,8,0,3,1] },
+  2018: { group: [5,1,1,6,3,2,1,2,1,1,2,1,3,3,3,3,4,1,1,1,2,1,3,2,3,2,7,3,3,7,4,3,2,3,4,2,0,2,3,3,2,3,4,2,1,1,1,3], knockout: [7,3,2,2,2,5,1,2,2,3,2,5,2,4,2,2] },
+  2022: { group: [2,8,2,2,3,0,0,5,0,3,7,1,1,0,5,2,2,4,2,0,1,2,3,2,1,2,1,2,6,5,1,2,2,3,3,2,1,1,3,2,0,3,3,6,3,2,1,5], knockout: [4,3,4,3,2,5,0,7,2,4,1,3,2,3,3,6] },
+  2026: { group: [2,3,2,5,2,2,1,2,8,4,1,6,2,0,4,2,4,5,3,4,2,6], knockout: [] }
+};
+
+const years = [2002,2006,2010,2014,2018,2022,2026];
+const avg = arr => arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length) : null;
+
+const groupAvgs = years.map(y => parseFloat(avg(data[y].group).toFixed(2)));
+const knockoutAvgs = years.map(y => data[y].knockout.length ? parseFloat(avg(data[y].knockout).toFixed(2)) : null);
+const overallAvgs = years.map(y => {
+  const all = [...data[y].group, ...data[y].knockout];
+  return parseFloat(avg(all).toFixed(2));
+});
+
+new Chart(document.getElementById('goalsChart'), {
+  type: 'bar',
+  data: {
+    labels: years.map(y => y === 2026 ? '2026*' : String(y)),
+    datasets: [
+      {
+        label: 'Group Stage',
+        data: groupAvgs,
+        backgroundColor: '#3266ad',
+        borderRadius: 3
+      },
+      {
+        label: 'Knockout',
+        data: knockoutAvgs,
+        backgroundColor: '#c2410c',
+        borderRadius: 3
+      },
+      {
+        label: 'Overall avg',
+        data: overallAvgs,
+        type: 'line',
+        borderColor: '#888',
+        borderDash: [5,3],
+        borderWidth: 1.5,
+        pointRadius: 4,
+        pointBackgroundColor: '#888',
+        fill: false,
+        tension: 0.3
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => ctx.parsed.y != null ? `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)} goals/match` : ''
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: false,
+        min: 1.5,
+        max: 3.5,
+        ticks: { callback: v => v.toFixed(1) },
+        grid: { color: 'rgba(128,128,128,0.15)' }
+      },
+      x: {
+        ticks: { autoSkip: false }
+      }
+    }
+  }
+});
+</script>

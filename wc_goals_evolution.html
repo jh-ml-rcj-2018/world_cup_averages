@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>World Cup — Average Goals Evolution</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #f5f4f0;
+    color: #1a1a1a;
+    padding: 2rem 1.5rem 3rem;
+    min-height: 100vh;
+  }
+  h1 { font-size: 20px; font-weight: 500; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #666; margin-bottom: 2rem; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+  }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    border: 0.5px solid rgba(0,0,0,0.12);
+    padding: 1.25rem 1.25rem 1rem;
+    position: relative;
+  }
+  .card-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  .card-year { font-size: 15px; font-weight: 500; }
+  .card-avg { font-size: 13px; color: #888; }
+  .card-avg span { font-weight: 500; color: #444; }
+  .chart-wrap { position: relative; height: 180px; }
+
+  #tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: #fff;
+    border: 0.5px solid rgba(0,0,0,0.15);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 240px;
+    z-index: 9999;
+    display: none;
+  }
+  #tooltip .tt-match { font-weight: 500; font-size: 13px; margin-bottom: 4px; }
+  #tooltip .tt-score { font-size: 18px; font-weight: 500; letter-spacing: -0.5px; margin-bottom: 2px; }
+  #tooltip .tt-meta { font-size: 12px; color: #888; }
+  #tooltip .tt-avg { font-size: 12px; color: #555; margin-top: 6px; border-top: 0.5px solid #eee; padding-top: 6px; }
+
+  .legend {
+    display: flex; gap: 1.5rem; margin-bottom: 1.5rem; font-size: 12px; color: #666; flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .legend-line { width: 20px; height: 2px; }
+
+  @media (prefers-color-scheme: dark) {
+    body { background: #141414; color: #e8e8e8; }
+    .card { background: #1f1f1f; border-color: rgba(255,255,255,0.1); }
+    .card-avg { color: #777; }
+    .card-avg span { color: #bbb; }
+    #tooltip { background: #222; border-color: rgba(255,255,255,0.15); color: #e8e8e8; }
+    #tooltip .tt-meta { color: #999; }
+    #tooltip .tt-avg { color: #aaa; border-top-color: #333; }
+    .subtitle { color: #888; }
+    .legend { color: #888; }
+  }
+</style>
+</head>
+<body>
+
+<h1>World Cup — average goals per match</h1>
+<p class="subtitle">Running average as matches are played. Hover over any point to see the game.</p>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#3266ad"></div> Group stage</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#c2410c"></div> Knockout</div>
+  <div class="legend-item"><div class="legend-line" style="background:#3266ad; opacity:0.3"></div> Running average</div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div id="tooltip">
+  <div class="tt-match" id="tt-match"></div>
+  <div class="tt-score" id="tt-score"></div>
+  <div class="tt-meta" id="tt-meta"></div>
+  <div class="tt-avg" id="tt-avg"></div>
+</div>
+
+<script>
+const RAW = [
+  [1,2002,1,"Group Stage","France","Senegal",0,1,1,1,1.00],
+  [2,2002,2,"Group Stage","Ireland","Cameroon",1,1,2,3,1.50],
+  [3,2002,3,"Group Stage","Germany","Saudi Arabia",8,0,8,11,3.67],
+  [4,2002,4,"Group Stage","Uruguay","Denmark",1,2,3,14,3.50],
+  [5,2002,5,"Group Stage","England","Sweden",1,1,2,16,3.20],
+  [6,2002,6,"Group Stage","Paraguay","South Africa",2,2,4,20,3.33],
+  [7,2002,7,"Group Stage","Argentina","Nigeria",1,0,1,21,3.00],
+  [8,2002,8,"Group Stage","Spain","Slovenia",3,1,4,25,3.13],
+  [9,2002,9,"Group Stage","Croatia","Mexico",0,1,1,26,2.89],
+  [10,2002,10,"Group Stage","Brazil","Turkey",2,1,3,29,2.90],
+  [11,2002,11,"Group Stage","Italy","Ecuador",2,0,2,31,2.82],
+  [12,2002,12,"Group Stage","China","Costa Rica",0,2,2,33,2.75],
+  [13,2002,13,"Group Stage","Japan","Belgium",2,2,4,37,2.85],
+  [14,2002,14,"Group Stage","South Korea","Poland",2,0,2,39,2.79],
+  [15,2002,15,"Group Stage","Russia","Tunisia",2,0,2,41,2.73],
+  [16,2002,16,"Group Stage","USA","Portugal",3,2,5,46,2.88],
+  [17,2002,17,"Group Stage","Germany","Ireland",1,1,2,48,2.82],
+  [18,2002,18,"Group Stage","Denmark","Senegal",1,1,2,50,2.78],
+  [19,2002,19,"Group Stage","Cameroon","Saudi Arabia",1,0,1,51,2.68],
+  [20,2002,20,"Group Stage","France","Uruguay",0,0,0,51,2.55],
+  [21,2002,21,"Group Stage","Sweden","Nigeria",2,1,3,54,2.57],
+  [22,2002,22,"Group Stage","Spain","Paraguay",3,1,4,58,2.64],
+  [23,2002,23,"Group Stage","Argentina","England",0,1,1,59,2.57],
+  [24,2002,24,"Group Stage","South Africa","Slovenia",1,0,1,60,2.50],
+  [25,2002,25,"Group Stage","Italy","Croatia",1,2,3,63,2.52],
+  [26,2002,26,"Group Stage","Brazil","China",4,0,4,67,2.58],
+  [27,2002,27,"Group Stage","Mexico","Ecuador",2,1,3,70,2.59],
+  [28,2002,28,"Group Stage","Costa Rica","Turkey",1,1,2,72,2.57],
+  [29,2002,29,"Group Stage","Japan","Russia",1,0,1,73,2.52],
+  [30,2002,30,"Group Stage","South Korea","USA",1,1,2,75,2.50],
+  [31,2002,31,"Group Stage","Tunisia","Belgium",1,1,2,77,2.48],
+  [32,2002,32,"Group Stage","Portugal","Poland",4,0,4,81,2.53],
+  [33,2002,33,"Group Stage","Denmark","France",2,0,2,83,2.52],
+  [34,2002,34,"Group Stage","Senegal","Uruguay",3,3,6,89,2.62],
+  [35,2002,35,"Group Stage","Cameroon","Germany",0,2,2,91,2.60],
+  [36,2002,36,"Group Stage","Saudi Arabia","Ireland",0,3,3,94,2.61],
+  [37,2002,37,"Group Stage","Sweden","Argentina",1,1,2,96,2.59],
+  [38,2002,38,"Group Stage","Nigeria","England",0,0,0,96,2.53],
+  [39,2002,39,"Group Stage","South Africa","Spain",2,3,5,101,2.59],
+  [40,2002,40,"Group Stage","Slovenia","Paraguay",1,3,4,105,2.63],
+  [41,2002,41,"Group Stage","Costa Rica","Brazil",2,5,7,112,2.73],
+  [42,2002,42,"Group Stage","Turkey","China",3,0,3,115,2.74],
+  [43,2002,43,"Group Stage","Mexico","Italy",1,1,2,117,2.72],
+  [44,2002,44,"Group Stage","Ecuador","Croatia",1,0,1,118,2.68],
+  [45,2002,45,"Group Stage","Tunisia","Japan",0,2,2,120,2.67],
+  [46,2002,46,"Group Stage","Belgium","Russia",3,2,5,125,2.72],
+  [47,2002,47,"Group Stage","Portugal","South Korea",0,1,1,126,2.68],
+  [48,2002,48,"Group Stage","Poland","USA",3,1,4,130,2.71],
+  [49,2002,49,"Knockout","Germany","Paraguay",1,0,1,131,2.67],
+  [50,2002,50,"Knockout","Denmark","England",0,3,3,134,2.68],
+  [51,2002,51,"Knockout","Sweden","Senegal",1,2,3,137,2.69],
+  [52,2002,52,"Knockout","Spain","Ireland",1,1,2,139,2.67],
+  [53,2002,53,"Knockout","Mexico","USA",0,2,2,141,2.66],
+  [54,2002,54,"Knockout","Brazil","Belgium",2,0,2,143,2.65],
+  [55,2002,55,"Knockout","Japan","Turkey",0,1,1,144,2.62],
+  [56,2002,56,"Knockout","South Korea","Italy",2,1,3,147,2.63],
+  [57,2002,57,"Knockout","England","Brazil",1,2,3,150,2.63],
+  [58,2002,58,"Knockout","Germany","USA",1,0,1,151,2.60],
+  [59,2002,59,"Knockout","Spain","South Korea",0,0,0,151,2.56],
+  [60,2002,60,"Knockout","Senegal","Turkey",0,1,1,152,2.53],
+  [61,2002,61,"Knockout","Germany","South Korea",1,0,1,153,2.51],
+  [62,2002,62,"Knockout","Brazil","Turkey",1,0,1,154,2.48],
+  [63,2002,63,"Knockout","South Korea","Turkey",2,3,5,159,2.52],
+  [64,2002,64,"Knockout","Germany","Brazil",0,2,2,161,2.52],
+  [65,2006,1,"Group Stage","Germany","Costa Rica",4,2,6,6,6.00],
+  [66,2006,2,"Group Stage","Poland","Ecuador",0,2,2,8,4.00],
+  [67,2006,3,"Group Stage","England","Paraguay",1,0,1,9,3.00],
+  [68,2006,4,"Group Stage","Trinidad & Tobago","Sweden",0,0,0,9,2.25],
+  [69,2006,5,"Group Stage","Argentina","Ivory Coast",2,1,3,12,2.40],
+  [70,2006,6,"Group Stage","Serbia & Montenegro","Netherlands",0,1,1,13,2.17],
+  [71,2006,7,"Group Stage","Mexico","Iran",3,1,4,17,2.43],
+  [72,2006,8,"Group Stage","Angola","Portugal",0,1,1,18,2.25],
+  [73,2006,9,"Group Stage","Australia","Japan",3,1,4,22,2.44],
+  [74,2006,10,"Group Stage","USA","Czech Republic",0,3,3,25,2.50],
+  [75,2006,11,"Group Stage","Italy","Ghana",2,0,2,27,2.45],
+  [76,2006,12,"Group Stage","South Korea","Togo",2,1,3,30,2.50],
+  [77,2006,13,"Group Stage","France","Switzerland",0,0,0,30,2.31],
+  [78,2006,14,"Group Stage","Brazil","Croatia",1,0,1,31,2.21],
+  [79,2006,15,"Group Stage","Spain","Ukraine",4,0,4,35,2.33],
+  [80,2006,16,"Group Stage","Tunisia","Saudi Arabia",2,2,4,39,2.44],
+  [81,2006,17,"Group Stage","Germany","Poland",1,0,1,40,2.35],
+  [82,2006,18,"Group Stage","Ecuador","Costa Rica",3,0,3,43,2.39],
+  [83,2006,19,"Group Stage","England","Trinidad & Tobago",2,0,2,45,2.37],
+  [84,2006,20,"Group Stage","Sweden","Paraguay",1,0,1,46,2.30],
+  [85,2006,21,"Group Stage","Argentina","Serbia & Montenegro",6,0,6,52,2.48],
+  [86,2006,22,"Group Stage","Netherlands","Ivory Coast",2,1,3,55,2.50],
+  [87,2006,23,"Group Stage","Mexico","Angola",0,0,0,55,2.39],
+  [88,2006,24,"Group Stage","Portugal","Iran",2,0,2,57,2.38],
+  [89,2006,25,"Group Stage","Czech Republic","Ghana",0,2,2,59,2.36],
+  [90,2006,26,"Group Stage","Italy","USA",1,1,2,61,2.35],
+  [91,2006,27,"Group Stage","Japan","Croatia",0,0,0,61,2.26],
+  [92,2006,28,"Group Stage","Brazil","Australia",2,0,2,63,2.25],
+  [93,2006,29,"Group Stage","France","South Korea",1,1,2,65,2.24],
+  [94,2006,30,"Group Stage","Togo","Switzerland",0,2,2,67,2.23],
+  [95,2006,31,"Group Stage","Saudi Arabia","Ukraine",0,4,4,71,2.29],
+  [96,2006,32,"Group Stage","Spain","Tunisia",3,1,4,75,2.34],
+  [97,2006,33,"Group Stage","Ecuador","Germany",0,3,3,78,2.36],
+  [98,2006,34,"Group Stage","Costa Rica","Poland",1,2,3,81,2.38],
+  [99,2006,35,"Group Stage","Paraguay","Trinidad & Tobago",2,0,2,83,2.37],
+  [100,2006,36,"Group Stage","Sweden","England",2,2,4,87,2.42],
+  [101,2006,37,"Group Stage","Portugal","Mexico",2,1,3,90,2.43],
+  [102,2006,38,"Group Stage","Iran","Angola",1,1,2,92,2.42],
+  [103,2006,39,"Group Stage","Ivory Coast","Serbia & Montenegro",3,2,5,97,2.49],
+  [104,2006,40,"Group Stage","Netherlands","Argentina",0,0,0,97,2.43],
+  [105,2006,41,"Group Stage","Czech Republic","Italy",0,2,2,99,2.41],
+  [106,2006,42,"Group Stage","Ghana","USA",2,1,3,102,2.43],
+  [107,2006,43,"Group Stage","Japan","Brazil",1,4,5,107,2.49],
+  [108,2006,44,"Group Stage","Croatia","Australia",2,2,4,111,2.52],
+  [109,2006,45,"Group Stage","Ukraine","Tunisia",1,0,1,112,2.49],
+  [110,2006,46,"Group Stage","Saudi Arabia","Spain",0,1,1,113,2.46],
+  [111,2006,47,"Group Stage","Switzerland","South Korea",2,0,2,115,2.45],
+  [112,2006,48,"Group Stage","Togo","France",0,2,2,117,2.44],
+  [113,2006,49,"Knockout","Germany","Sweden",2,0,2,119,2.43],
+  [114,2006,50,"Knockout","Argentina","Mexico",2,1,3,122,2.44],
+  [115,2006,51,"Knockout","England","Ecuador",1,0,1,123,2.41],
+  [116,2006,52,"Knockout","Portugal","Netherlands",1,0,1,124,2.38],
+  [117,2006,53,"Knockout","Italy","Australia",1,0,1,125,2.36],
+  [118,2006,54,"Knockout","Switzerland","Ukraine",0,0,0,125,2.31],
+  [119,2006,55,"Knockout","Brazil","Ghana",3,0,3,128,2.33],
+  [120,2006,56,"Knockout","Spain","France",1,3,4,132,2.36],
+  [121,2006,57,"Knockout","Germany","Argentina",1,1,2,134,2.35],
+  [122,2006,58,"Knockout","Italy","Ukraine",3,0,3,137,2.36],
+  [123,2006,59,"Knockout","England","Portugal",0,0,0,137,2.32],
+  [124,2006,60,"Knockout","Brazil","France",0,1,1,138,2.30],
+  [125,2006,61,"Knockout","Germany","Italy",0,2,2,140,2.30],
+  [126,2006,62,"Knockout","Portugal","France",0,1,1,141,2.27],
+  [127,2006,63,"Knockout","Germany","Portugal",3,1,4,145,2.30],
+  [128,2006,64,"Knockout","Italy","France",1,1,2,147,2.30],
+  [129,2010,1,"Group Stage","South Africa","Mexico",1,1,2,2,2.00],
+  [130,2010,2,"Group Stage","Uruguay","France",0,0,0,2,1.00],
+  [131,2010,3,"Group Stage","South Korea","Greece",2,0,2,4,1.33],
+  [132,2010,4,"Group Stage","Argentina","Nigeria",1,0,1,5,1.25],
+  [133,2010,5,"Group Stage","England","USA",1,1,2,7,1.40],
+  [134,2010,6,"Group Stage","Algeria","Slovenia",0,1,1,8,1.33],
+  [135,2010,7,"Group Stage","Serbia","Ghana",0,1,1,9,1.29],
+  [136,2010,8,"Group Stage","Germany","Australia",4,0,4,13,1.63],
+  [137,2010,9,"Group Stage","Netherlands","Denmark",2,0,2,15,1.67],
+  [138,2010,10,"Group Stage","Japan","Cameroon",1,0,1,16,1.60],
+  [139,2010,11,"Group Stage","Italy","Paraguay",1,1,2,18,1.64],
+  [140,2010,12,"Group Stage","New Zealand","Slovakia",1,1,2,20,1.67],
+  [141,2010,13,"Group Stage","Ivory Coast","Portugal",0,0,0,20,1.54],
+  [142,2010,14,"Group Stage","Brazil","North Korea",2,1,3,23,1.64],
+  [143,2010,15,"Group Stage","Honduras","Chile",0,1,1,24,1.60],
+  [144,2010,16,"Group Stage","Spain","Switzerland",0,1,1,25,1.56],
+  [145,2010,17,"Group Stage","South Africa","Uruguay",0,3,3,28,1.65],
+  [146,2010,18,"Group Stage","Argentina","South Korea",4,1,5,33,1.83],
+  [147,2010,19,"Group Stage","Greece","Nigeria",2,1,3,36,1.89],
+  [148,2010,20,"Group Stage","France","Mexico",0,2,2,38,1.90],
+  [149,2010,21,"Group Stage","Germany","Serbia",0,1,1,39,1.86],
+  [150,2010,22,"Group Stage","Slovenia","USA",2,2,4,43,1.95],
+  [151,2010,23,"Group Stage","England","Algeria",0,0,0,43,1.87],
+  [152,2010,24,"Group Stage","Netherlands","Japan",1,0,1,44,1.83],
+  [153,2010,25,"Group Stage","Ghana","Australia",1,1,2,46,1.84],
+  [154,2010,26,"Group Stage","Cameroon","Denmark",1,2,3,49,1.88],
+  [155,2010,27,"Group Stage","Slovakia","Paraguay",0,2,2,51,1.89],
+  [156,2010,28,"Group Stage","Italy","New Zealand",1,1,2,53,1.89],
+  [157,2010,29,"Group Stage","Brazil","Ivory Coast",3,1,4,57,1.97],
+  [158,2010,30,"Group Stage","Portugal","North Korea",7,0,7,64,2.13],
+  [159,2010,31,"Group Stage","China","Switzerland",1,0,1,65,2.10],
+  [160,2010,32,"Group Stage","Spain","Honduras",2,0,2,67,2.09],
+  [161,2010,33,"Group Stage","Mexico","Uruguay",0,1,1,68,2.06],
+  [162,2010,34,"Group Stage","France","South Africa",1,2,3,71,2.09],
+  [163,2010,35,"Group Stage","Greece","Argentina",0,2,2,73,2.09],
+  [164,2010,36,"Group Stage","Nigeria","South Korea",2,2,4,77,2.14],
+  [165,2010,37,"Group Stage","Slovenia","England",0,1,1,78,2.11],
+  [166,2010,38,"Group Stage","USA","Algeria",1,0,1,79,2.08],
+  [167,2010,39,"Group Stage","Australia","Serbia",2,1,3,82,2.10],
+  [168,2010,40,"Group Stage","Ghana","Germany",0,1,1,83,2.08],
+  [169,2010,41,"Group Stage","Slovakia","Italy",3,2,5,88,2.15],
+  [170,2010,42,"Group Stage","Paraguay","New Zealand",0,0,0,88,2.10],
+  [171,2010,43,"Group Stage","Denmark","Japan",1,3,4,92,2.14],
+  [172,2010,44,"Group Stage","Cameroon","Netherlands",1,2,3,95,2.16],
+  [173,2010,45,"Group Stage","Portugal","Brazil",0,0,0,95,2.11],
+  [174,2010,46,"Group Stage","North Korea","Ivory Coast",0,3,3,98,2.13],
+  [175,2010,47,"Group Stage","Switzerland","Honduras",0,0,0,98,2.09],
+  [176,2010,48,"Group Stage","Chile","Spain",1,2,3,101,2.10],
+  [177,2010,49,"Knockout","Uruguay","South Korea",2,1,3,104,2.12],
+  [178,2010,50,"Knockout","USA","Ghana",1,2,3,107,2.14],
+  [179,2010,51,"Knockout","Germany","England",4,1,5,112,2.20],
+  [180,2010,52,"Knockout","Argentina","Mexico",3,1,4,116,2.23],
+  [181,2010,53,"Knockout","Netherlands","Slovakia",2,1,3,119,2.25],
+  [182,2010,54,"Knockout","Brazil","Chile",3,0,3,122,2.26],
+  [183,2010,55,"Knockout","Paraguay","Japan",0,0,0,122,2.22],
+  [184,2010,56,"Knockout","Spain","Portugal",1,0,1,123,2.20],
+  [185,2010,57,"Knockout","Netherlands","Brazil",2,1,3,126,2.21],
+  [186,2010,58,"Knockout","Uruguay","Ghana",1,1,2,128,2.21],
+  [187,2010,59,"Knockout","Argentina","Germany",0,4,4,132,2.24],
+  [188,2010,60,"Knockout","Paraguay","Spain",0,1,1,133,2.22],
+  [189,2010,61,"Knockout","Uruguay","Netherlands",2,3,5,138,2.26],
+  [190,2010,62,"Knockout","Germany","Spain",0,1,1,139,2.24],
+  [191,2010,63,"Knockout","Uruguay","Germany",2,3,5,144,2.29],
+  [192,2010,64,"Knockout","Netherlands","Spain",0,1,1,145,2.27],
+  [193,2014,1,"Group Stage","Brazil","Croatia",3,1,4,4,4.00],
+  [194,2014,2,"Group Stage","Mexico","Cameroon",1,0,1,5,2.50],
+  [195,2014,3,"Group Stage","Spain","Netherlands",1,5,6,11,3.67],
+  [196,2014,4,"Group Stage","Chile","Australia",3,1,4,15,3.75],
+  [197,2014,5,"Group Stage","Colombia","Greece",3,0,3,18,3.60],
+  [198,2014,6,"Group Stage","Uruguay","Costa Rica",1,3,4,22,3.67],
+  [199,2014,7,"Group Stage","England","Italy",1,2,3,25,3.57],
+  [200,2014,8,"Group Stage","Ivory Coast","Japan",2,1,3,28,3.50],
+  [201,2014,9,"Group Stage","Switzerland","Ecuador",2,1,3,31,3.44],
+  [202,2014,10,"Group Stage","France","Honduras",3,0,3,34,3.40],
+  [203,2014,11,"Group Stage","Argentina","Bosnia-Herzegovina",2,1,3,37,3.36],
+  [204,2014,12,"Group Stage","Germany","Portugal",4,0,4,41,3.42],
+  [205,2014,13,"Group Stage","Iran","Nigeria",0,0,0,41,3.15],
+  [206,2014,14,"Group Stage","Ghana","USA",1,2,3,44,3.14],
+  [207,2014,15,"Group Stage","Belgium","Algeria",2,1,3,47,3.13],
+  [208,2014,16,"Group Stage","Brazil","Mexico",0,0,0,47,2.94],
+  [209,2014,17,"Group Stage","Russia","South Korea",1,1,2,49,2.88],
+  [210,2014,18,"Group Stage","Australia","Netherlands",2,3,5,54,3.00],
+  [211,2014,19,"Group Stage","Spain","Chile",0,2,2,56,2.95],
+  [212,2014,20,"Group Stage","Cameroon","Croatia",0,4,4,60,3.00],
+  [213,2014,21,"Group Stage","Colombia","Ivory Coast",2,1,3,63,3.00],
+  [214,2014,22,"Group Stage","Uruguay","England",2,1,3,66,3.00],
+  [215,2014,23,"Group Stage","Japan","Greece",0,0,0,66,2.87],
+  [216,2014,24,"Group Stage","Italy","Costa Rica",0,1,1,67,2.79],
+  [217,2014,25,"Group Stage","Switzerland","France",2,5,7,74,2.96],
+  [218,2014,26,"Group Stage","Honduras","Ecuador",1,2,3,77,2.96],
+  [219,2014,27,"Group Stage","Argentina","Iran",1,0,1,78,2.89],
+  [220,2014,28,"Group Stage","Germany","Ghana",2,2,4,82,2.93],
+  [221,2014,29,"Group Stage","Nigeria","Bosnia-Herzegovina",1,0,1,83,2.86],
+  [222,2014,30,"Group Stage","Belgium","Russia",1,0,1,84,2.80],
+  [223,2014,31,"Group Stage","South Korea","Algeria",2,4,6,90,2.90],
+  [224,2014,32,"Group Stage","USA","Portugal",2,2,4,94,2.94],
+  [225,2014,33,"Group Stage","Australia","Spain",0,3,3,97,2.94],
+  [226,2014,34,"Group Stage","Netherlands","Chile",2,0,2,99,2.91],
+  [227,2014,35,"Group Stage","Cameroon","Brazil",1,4,5,104,2.97],
+  [228,2014,36,"Group Stage","Croatia","Mexico",1,3,4,108,3.00],
+  [229,2014,37,"Group Stage","Italy","Uruguay",0,1,1,109,2.95],
+  [230,2014,38,"Group Stage","Costa Rica","England",0,0,0,109,2.87],
+  [231,2014,39,"Group Stage","Japan","Colombia",1,4,5,114,2.92],
+  [232,2014,40,"Group Stage","Greece","Ivory Coast",2,1,3,117,2.93],
+  [233,2014,41,"Group Stage","Nigeria","Argentina",2,3,5,122,2.98],
+  [234,2014,42,"Group Stage","Bosnia-Herzegovina","Iran",3,1,4,126,3.00],
+  [235,2014,43,"Group Stage","Honduras","Switzerland",0,3,3,129,3.00],
+  [236,2014,44,"Group Stage","Ecuador","France",0,0,0,129,2.93],
+  [237,2014,45,"Group Stage","USA","Germany",0,1,1,130,2.89],
+  [238,2014,46,"Group Stage","Portugal","Ghana",2,1,3,133,2.89],
+  [239,2014,47,"Group Stage","Algeria","Russia",1,1,2,135,2.87],
+  [240,2014,48,"Group Stage","South Korea","Belgium",0,1,1,136,2.83],
+  [241,2014,49,"Knockout","Brazil","Chile",1,1,2,138,2.82],
+  [242,2014,50,"Knockout","Colombia","Uruguay",2,0,2,140,2.80],
+  [243,2014,51,"Knockout","Netherlands","Mexico",2,1,3,143,2.80],
+  [244,2014,52,"Knockout","Costa Rica","Greece",1,1,2,145,2.79],
+  [245,2014,53,"Knockout","France","Nigeria",2,0,2,147,2.77],
+  [246,2014,54,"Knockout","Germany","Algeria",2,1,3,150,2.78],
+  [247,2014,55,"Knockout","Argentina","Switzerland",1,0,1,151,2.75],
+  [248,2014,56,"Knockout","Belgium","USA",2,1,3,154,2.75],
+  [249,2014,57,"Knockout","France","Germany",0,1,1,155,2.72],
+  [250,2014,58,"Knockout","Brazil","Colombia",2,1,3,158,2.72],
+  [251,2014,59,"Knockout","Argentina","Belgium",1,0,1,159,2.69],
+  [252,2014,60,"Knockout","Netherlands","Costa Rica",0,0,0,159,2.65],
+  [253,2014,61,"Knockout","Brazil","Germany",1,7,8,167,2.74],
+  [254,2014,62,"Knockout","Netherlands","Argentina",0,0,0,167,2.69],
+  [255,2014,63,"Knockout","Brazil","Netherlands",0,3,3,170,2.70],
+  [256,2014,64,"Knockout","Germany","Argentina",1,0,1,171,2.67],
+  [257,2018,1,"Group Stage","Russia","Saudi Arabia",5,0,5,5,5.00],
+  [258,2018,2,"Group Stage","Egypt","Uruguay",0,1,1,6,3.00],
+  [259,2018,3,"Group Stage","Morocco","Iran",0,1,1,7,2.33],
+  [260,2018,4,"Group Stage","Portugal","Spain",3,3,6,13,3.25],
+  [261,2018,5,"Group Stage","France","Australia",2,1,3,16,3.20],
+  [262,2018,6,"Group Stage","Argentina","Iceland",1,1,2,18,3.00],
+  [263,2018,7,"Group Stage","Peru","Denmark",0,1,1,19,2.71],
+  [264,2018,8,"Group Stage","Croatia","Nigeria",2,0,2,21,2.63],
+  [265,2018,9,"Group Stage","Costa Rica","Serbia",0,1,1,22,2.44],
+  [266,2018,10,"Group Stage","Germany","Mexico",0,1,1,23,2.30],
+  [267,2018,11,"Group Stage","Brazil","Switzerland",1,1,2,25,2.27],
+  [268,2018,12,"Group Stage","Sweden","South Korea",1,0,1,26,2.17],
+  [269,2018,13,"Group Stage","Belgium","Panama",3,0,3,29,2.23],
+  [270,2018,14,"Group Stage","Tunisia","England",1,2,3,32,2.29],
+  [271,2018,15,"Group Stage","Colombia","Japan",1,2,3,35,2.33],
+  [272,2018,16,"Group Stage","Poland","Senegal",1,2,3,38,2.38],
+  [273,2018,17,"Group Stage","Russia","Egypt",3,1,4,42,2.47],
+  [274,2018,18,"Group Stage","Portugal","Morocco",1,0,1,43,2.39],
+  [275,2018,19,"Group Stage","Uruguay","Saudi Arabia",1,0,1,44,2.32],
+  [276,2018,20,"Group Stage","Iran","Spain",0,1,1,45,2.25],
+  [277,2018,21,"Group Stage","Denmark","Australia",1,1,2,47,2.24],
+  [278,2018,22,"Group Stage","France","Peru",1,0,1,48,2.18],
+  [279,2018,23,"Group Stage","Argentina","Croatia",0,3,3,51,2.22],
+  [280,2018,24,"Group Stage","Brazil","Costa Rica",2,0,2,53,2.21],
+  [281,2018,25,"Group Stage","Nigeria","Iceland",2,0,2,55,2.20],
+  [282,2018,26,"Group Stage","Serbia","Switzerland",1,2,3,58,2.23],
+  [283,2018,27,"Group Stage","Belgium","Tunisia",5,2,7,65,2.41],
+  [284,2018,28,"Group Stage","South Korea","Mexico",1,2,3,68,2.43],
+  [285,2018,29,"Group Stage","Germany","Sweden",2,1,3,71,2.45],
+  [286,2018,30,"Group Stage","England","Panama",6,1,7,78,2.60],
+  [287,2018,31,"Group Stage","Japan","Senegal",2,2,4,82,2.65],
+  [288,2018,32,"Group Stage","Poland","Colombia",0,3,3,85,2.66],
+  [289,2018,33,"Group Stage","Saudi Arabia","Egypt",2,1,3,88,2.67],
+  [290,2018,34,"Group Stage","Uruguay","Russia",3,0,3,91,2.68],
+  [291,2018,35,"Group Stage","Spain","Morocco",2,2,4,95,2.71],
+  [292,2018,36,"Group Stage","Iran","Portugal",1,1,2,97,2.69],
+  [293,2018,37,"Group Stage","Denmark","France",0,0,0,97,2.62],
+  [294,2018,38,"Group Stage","Australia","Peru",0,2,2,99,2.61],
+  [295,2018,39,"Group Stage","Iceland","Croatia",1,2,3,102,2.62],
+  [296,2018,40,"Group Stage","Nigeria","Argentina",1,2,3,105,2.63],
+  [297,2018,41,"Group Stage","South Korea","Germany",2,0,2,107,2.61],
+  [298,2018,42,"Group Stage","Mexico","Sweden",0,3,3,110,2.62],
+  [299,2018,43,"Group Stage","Switzerland","Costa Rica",2,2,4,114,2.65],
+  [300,2018,44,"Group Stage","Serbia","Brazil",0,2,2,116,2.64],
+  [301,2018,45,"Group Stage","Japan","Poland",0,1,1,117,2.60],
+  [302,2018,46,"Group Stage","Senegal","Colombia",0,1,1,118,2.57],
+  [303,2018,47,"Group Stage","England","Belgium",0,1,1,119,2.53],
+  [304,2018,48,"Group Stage","Panama","Tunisia",1,2,3,122,2.54],
+  [305,2018,49,"Knockout","France","Uruguay",4,3,7,129,2.63],
+  [306,2018,50,"Knockout","Uruguay","Portugal",2,1,3,132,2.64],
+  [307,2018,51,"Knockout","Spain","Russia",1,1,2,134,2.63],
+  [308,2018,52,"Knockout","Croatia","Denmark",1,1,2,136,2.62],
+  [309,2018,53,"Knockout","Brazil","Mexico",2,0,2,138,2.60],
+  [310,2018,54,"Knockout","Belgium","Japan",3,2,5,143,2.65],
+  [311,2018,55,"Knockout","Sweden","Switzerland",1,0,1,144,2.62],
+  [312,2018,56,"Knockout","Colombia","England",1,1,2,146,2.61],
+  [313,2018,57,"Knockout","Uruguay","France",0,2,2,148,2.60],
+  [314,2018,58,"Knockout","Brazil","Belgium",1,2,3,151,2.60],
+  [315,2018,59,"Knockout","Sweden","England",0,2,2,153,2.59],
+  [316,2018,60,"Knockout","Russia","Croatia",2,2,4,157,2.62],
+  [317,2018,61,"Knockout","France","Belgium",1,0,1,158,2.59],
+  [318,2018,62,"Knockout","Croatia","England",2,1,3,161,2.60],
+  [319,2018,63,"Knockout","Belgium","England",2,0,2,163,2.59],
+  [320,2018,64,"Knockout","France","Croatia",4,2,6,169,2.64],
+  [321,2022,1,"Group Stage","Qatar","Ecuador",0,2,2,2,2.00],
+  [322,2022,2,"Group Stage","England","Iran",6,2,8,10,5.00],
+  [323,2022,3,"Group Stage","Senegal","Netherlands",0,2,2,12,4.00],
+  [324,2022,4,"Group Stage","USA","Wales",1,1,2,14,3.50],
+  [325,2022,5,"Group Stage","Argentina","Saudi Arabia",1,2,3,17,3.40],
+  [326,2022,6,"Group Stage","Denmark","Tunisia",0,0,0,17,2.83],
+  [327,2022,7,"Group Stage","Mexico","Poland",0,0,0,17,2.43],
+  [328,2022,8,"Group Stage","France","Australia",4,1,5,22,2.75],
+  [329,2022,9,"Group Stage","Morocco","Croatia",0,0,0,22,2.44],
+  [330,2022,10,"Group Stage","Germany","Japan",1,2,3,25,2.50],
+  [331,2022,11,"Group Stage","Spain","Costa Rica",7,0,7,32,2.91],
+  [332,2022,12,"Group Stage","Belgium","Canada",1,0,1,33,2.75],
+  [333,2022,13,"Group Stage","Switzerland","Cameroon",1,0,1,34,2.62],
+  [334,2022,14,"Group Stage","Uruguay","South Korea",0,0,0,34,2.43],
+  [335,2022,15,"Group Stage","Portugal","Ghana",3,2,5,39,2.60],
+  [336,2022,16,"Group Stage","Brazil","Serbia",2,0,2,41,2.56],
+  [337,2022,17,"Group Stage","Wales","Iran",0,2,2,43,2.53],
+  [338,2022,18,"Group Stage","Qatar","Senegal",1,3,4,47,2.61],
+  [339,2022,19,"Group Stage","Netherlands","Ecuador",1,1,2,49,2.58],
+  [340,2022,20,"Group Stage","England","USA",0,0,0,49,2.45],
+  [341,2022,21,"Group Stage","Tunisia","Australia",0,1,1,50,2.38],
+  [342,2022,22,"Group Stage","Poland","Saudi Arabia",2,0,2,52,2.36],
+  [343,2022,23,"Group Stage","France","Denmark",2,1,3,55,2.39],
+  [344,2022,24,"Group Stage","Argentina","Mexico",2,0,2,57,2.38],
+  [345,2022,25,"Group Stage","Japan","Costa Rica",0,1,1,58,2.32],
+  [346,2022,26,"Group Stage","Belgium","Morocco",0,2,2,60,2.31],
+  [347,2022,27,"Group Stage","Croatia","Canada",4,1,5,65,2.41],
+  [348,2022,28,"Group Stage","Spain","Germany",1,1,2,67,2.39],
+  [349,2022,29,"Group Stage","Cameroon","Serbia",3,3,6,73,2.52],
+  [350,2022,30,"Group Stage","South Korea","Ghana",2,3,5,78,2.60],
+  [351,2022,31,"Group Stage","Brazil","Switzerland",1,0,1,79,2.55],
+  [352,2022,32,"Group Stage","Portugal","Uruguay",2,0,2,81,2.53],
+  [353,2022,33,"Group Stage","Netherlands","Qatar",2,0,2,83,2.52],
+  [354,2022,34,"Group Stage","Ecuador","Senegal",1,2,3,86,2.53],
+  [355,2022,35,"Group Stage","Wales","England",0,3,3,89,2.54],
+  [356,2022,36,"Group Stage","Iran","USA",0,1,1,90,2.50],
+  [357,2022,37,"Group Stage","Australia","Denmark",1,0,1,91,2.46],
+  [358,2022,38,"Group Stage","Tunisia","France",1,0,1,92,2.42],
+  [359,2022,39,"Group Stage","Saudi Arabia","Mexico",1,2,3,95,2.44],
+  [360,2022,40,"Group Stage","Poland","Argentina",0,2,2,97,2.43],
+  [361,2022,41,"Group Stage","Croatia","Belgium",0,0,0,97,2.37],
+  [362,2022,42,"Group Stage","Canada","Morocco",1,2,3,100,2.38],
+  [363,2022,43,"Group Stage","Japan","Spain",2,1,3,103,2.40],
+  [364,2022,44,"Group Stage","Costa Rica","Germany",2,4,6,109,2.48],
+  [365,2022,45,"Group Stage","South Korea","Portugal",2,1,3,112,2.49],
+  [366,2022,46,"Group Stage","Ghana","Uruguay",0,2,2,114,2.48],
+  [367,2022,47,"Group Stage","Cameroon","Brazil",1,0,1,115,2.45],
+  [368,2022,48,"Group Stage","Serbia","Switzerland",2,3,5,120,2.50],
+  [369,2022,49,"Knockout","Netherlands","USA",3,1,4,124,2.53],
+  [370,2022,50,"Knockout","Argentina","Australia",2,1,3,127,2.54],
+  [371,2022,51,"Knockout","France","Poland",3,1,4,131,2.57],
+  [372,2022,52,"Knockout","England","Senegal",3,0,3,134,2.58],
+  [373,2022,53,"Knockout","Japan","Croatia",1,1,2,136,2.57],
+  [374,2022,54,"Knockout","Brazil","South Korea",4,1,5,141,2.61],
+  [375,2022,55,"Knockout","Morocco","Spain",0,0,0,141,2.56],
+  [376,2022,56,"Knockout","Portugal","Switzerland",6,1,7,148,2.64],
+  [377,2022,57,"Knockout","Croatia","Brazil",1,1,2,150,2.63],
+  [378,2022,58,"Knockout","Netherlands","Argentina",2,2,4,154,2.66],
+  [379,2022,59,"Knockout","Morocco","Portugal",1,0,1,155,2.63],
+  [380,2022,60,"Knockout","England","France",1,2,3,158,2.63],
+  [381,2022,61,"Knockout","Argentina","Croatia",3,0,3,161,2.64],
+  [382,2022,62,"Knockout","France","Morocco",2,0,2,163,2.63],
+  [383,2022,63,"Knockout","Croatia","Morocco",2,1,3,166,2.63],
+  [384,2022,64,"Knockout","Argentina","France",3,3,6,172,2.69],
+  [385,2026,1,"Group Stage","Mexico","South Africa",2,0,2,2,2.00],
+  [386,2026,2,"Group Stage","South Korea","Czech Republic",2,1,3,5,2.50],
+  [387,2026,3,"Group Stage","Canada","Bosnia-Herzegovina",1,1,2,7,2.33],
+  [388,2026,4,"Group Stage","USA","Paraguay",4,1,5,12,3.00],
+  [389,2026,5,"Group Stage","Qatar","Switzerland",1,1,2,14,2.80],
+  [390,2026,6,"Group Stage","Brazil","Morocco",1,1,2,16,2.67],
+  [391,2026,7,"Group Stage","Haiti","Scotland",0,1,1,17,2.43],
+  [392,2026,8,"Group Stage","Australia","Turkey",2,0,2,19,2.38],
+  [393,2026,9,"Group Stage","Germany","Curacao",7,1,8,27,3.00],
+  [394,2026,10,"Group Stage","Netherlands","Japan",2,2,4,31,3.10],
+  [395,2026,11,"Group Stage","Ivory Coast","Ecuador",1,0,1,32,2.91],
+  [396,2026,12,"Group Stage","Sweden","Tunisia",5,1,6,38,3.17],
+  [397,2026,13,"Group Stage","Belgium","Egypt",1,1,2,40,3.08],
+  [398,2026,14,"Group Stage","Spain","Cape Verde",0,0,0,40,2.86],
+  [399,2026,15,"Group Stage","Iran","New Zealand",2,2,4,44,2.93],
+  [400,2026,16,"Group Stage","Saudi Arabia","Uruguay",1,1,2,46,2.88],
+  [401,2026,17,"Group Stage","France","Senegal",3,1,4,50,2.94],
+  [402,2026,18,"Group Stage","Iraq","Norway",1,4,5,55,3.06],
+  [403,2026,19,"Group Stage","Argentina","Algeria",3,0,3,58,3.05],
+  [404,2026,20,"Group Stage","Austria","Jordan",3,1,4,62,3.10],
+  [405,2026,21,"Group Stage","Portugal","Congo DR",1,1,2,64,3.05],
+  [406,2026,22,"Group Stage","England","Croatia",4,2,6,70,3.18],
+];
+
+const years = [2002,2006,2010,2014,2018,2022,2026];
+const COLORS = {
+  group: { line:'#3266ad', point:'#3266ad' },
+  knockout: { line:'#c2410c', point:'#c2410c' }
+};
+
+const byYear = {};
+years.forEach(y => {
+  byYear[y] = RAW.filter(r => r[1] === y).map(r => ({
+    match: r[2],
+    phase: r[3],
+    team1: r[4],
+    team2: r[5],
+    s1: r[6],
+    s2: r[7],
+    goals: r[8],
+    cumGoals: r[9],
+    avg: r[10]
+  }));
+});
+
+const grid = document.getElementById('grid');
+const tooltip = document.getElementById('tooltip');
+const ttMatch = document.getElementById('tt-match');
+const ttScore = document.getElementById('tt-score');
+const ttMeta = document.getElementById('tt-meta');
+const ttAvg = document.getElementById('tt-avg');
+
+let activeTooltipChart = null;
+
+years.forEach(year => {
+  const matches = byYear[year];
+  const finalAvg = matches[matches.length-1].avg.toFixed(2);
+  const isPartial = year === 2026;
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="card-header">
+      <span class="card-year">${year}${isPartial ? ' <span style="font-size:11px;color:#aaa;font-weight:400">(in progress)</span>' : ''}</span>
+      <span class="card-avg">avg <span>${finalAvg}</span> goals/match</span>
+    </div>
+    <div class="chart-wrap"><canvas id="chart-${year}" role="img" aria-label="Running average goals per match for ${year} World Cup">${year} WC running goal average.</canvas></div>
+  `;
+  grid.appendChild(card);
+
+  const labels = matches.map(m => `Match ${m.match}`);
+  const avgs = matches.map(m => m.avg);
+  const phases = matches.map(m => m.phase);
+  const pointColors = phases.map(p => p === 'Group Stage' ? COLORS.group.point : COLORS.knockout.point);
+  const pointSizes = matches.map(() => 3.5);
+
+  const ctx = document.getElementById(`chart-${year}`).getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: avgs,
+        borderColor: '#3266ad',
+        borderWidth: 1.5,
+        pointBackgroundColor: pointColors,
+        pointBorderColor: pointColors,
+        pointRadius: pointSizes,
+        pointHoverRadius: 6,
+        tension: 0.3,
+        fill: false,
+        segment: {
+          borderColor: ctx2 => {
+            const i = ctx2.p1DataIndex;
+            return phases[i] === 'Group Stage' ? '#3266ad' : '#c2410c';
+          }
+        }
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false }
+      },
+      scales: {
+        x: {
+          display: false
+        },
+        y: {
+          min: Math.floor(Math.min(...avgs) * 10 - 3) / 10,
+          max: Math.ceil(Math.max(...avgs) * 10 + 3) / 10,
+          ticks: {
+            font: { size: 11 },
+            color: '#999',
+            maxTicksLimit: 5,
+            callback: v => v.toFixed(1)
+          },
+          grid: { color: 'rgba(128,128,128,0.1)' }
+        }
+      },
+      onHover: (event, elements) => {
+        const canvas = event.native.target;
+        if (elements.length > 0) {
+          const idx = elements[0].index;
+          const m = matches[idx];
+          canvas.style.cursor = 'crosshair';
+
+          ttMatch.textContent = `${m.team1} vs ${m.team2}`;
+          ttScore.textContent = `${m.s1} – ${m.s2}`;
+          ttMeta.textContent = `Match ${m.match} · ${m.phase} · ${year}`;
+          ttAvg.textContent = `Running avg after this match: ${m.avg.toFixed(2)} goals`;
+
+          const rect = canvas.getBoundingClientRect();
+          const x = event.native.clientX;
+          const y = event.native.clientY;
+
+          let left = x + 14;
+          let top = y - 10;
+          tooltip.style.display = 'block';
+          const tw = tooltip.offsetWidth;
+          const th = tooltip.offsetHeight;
+          if (left + tw > window.innerWidth - 8) left = x - tw - 14;
+          if (top + th > window.innerHeight - 8) top = y - th + 10;
+
+          tooltip.style.left = left + 'px';
+          tooltip.style.top = top + 'px';
+        } else {
+          canvas.style.cursor = 'default';
+          tooltip.style.display = 'none';
+        }
+      }
+    }
+  });
+});
+
+document.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+</script>
+</body>
+</html>
